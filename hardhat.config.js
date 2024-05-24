@@ -34,7 +34,7 @@ module.exports = {
       deployment: deployments.localhost,
     },
     arbitrumSepolia: {
-      url: config?.ARBITRUM_SEPOLIA_RPC || DEFAULT_RPC,
+      url: config?.parsed?.ARBITRUM_SEPOLIA_RPC || DEFAULT_RPC,
       accounts: deployerAccounts,
       deployment: deployments.arbitrumSepolia,
     },
