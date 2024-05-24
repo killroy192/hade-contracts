@@ -2,18 +2,20 @@
 
 .PHONY: all test clean install compile snapshot 
 
-all: clean init-env install test
+all: init-clean add-env install test
+
+init-clean :; forge clean; rm -rf node_modules; 
 
 # Clean the repo
-clean :; forge clean; rm -rf node_modules; rm .env
+clean :; init-clean; rm .env
 
-init-env :; touch .env;
+add-env :; touch .env;
 
 # Local installation
 install :; npm i && npx husky install
 
 # CI installation
-install-ci :; touch .env; npm ci
+install-ci :; add-env; npm ci
 
 # Update Dependencies
 forge-update:; forge update
