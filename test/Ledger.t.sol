@@ -8,6 +8,7 @@ pragma solidity ^0.8.16;
 import "@std/Test.sol";
 
 import {Ledger} from "src/Ledger.sol";
+import {LedgerLib} from "src/LedgerLib.sol";
 import {TestUtils} from "./TestUtils.sol";
 
 contract LedgerTest is Test {
@@ -22,24 +23,30 @@ contract LedgerTest is Test {
     function setUp() public {
         ledger = new Ledger();
         spend_secret_h = keccak256(abi.encode(SPEND_SECRET));
-        utxoRoot = TestUtils.hashPair(spend_secret_h, PROOF_SECRET);
+        utxoRoot = LedgerLib.efficientHash(PROOF_SECRET, spend_secret_h);
+    }
+
+    function deposit(uint8 amount) private returns (uint256) {
+        uint256 parsedAmount = TestUtils.to256dec(amount, 7);
+        ledger.deposit{value: parsedAmount}(utxoRoot);
+        return parsedAmount;
     }
 
     function testFuzz_deposit(uint8 amount) external {
         vm.assume(amount > 0);
-        uint256 deposit = TestUtils.to256dec(amount, 7);
-        ledger.deposit{value: deposit}(utxoRoot);
-        assertEq(ledger.balanceOf(utxoRoot), deposit);
+        uint256 parsedAmount = deposit(amount);
+        assertEq(ledger.balanceOf(utxoRoot), parsedAmount);
     }
 
     function testFuzz_withdraw(uint8 amount) external {
         vm.assume(amount > 0);
-        uint256 deposit = TestUtils.to256dec(amount, 7);
-        ledger.deposit{value: deposit}(utxoRoot);
-        bytes32[] memory proof = new bytes32[](1);
-        proof[0] = PROOF_SECRET;
-        ledger.withdraw(proof, utxoRoot, SPEND_SECRET, payable(ALICE));
+        uint256 parsedAmount = deposit(amount);
+        ledger.withdraw(PROOF_SECRET, SPEND_SECRET, payable(ALICE));
         assertEq(ledger.balanceOf(utxoRoot), 0);
-        assertEq(ALICE.balance, deposit);
+        assertEq(ALICE.balance, parsedAmount);
     }
+
+    // function test_transfer(type name) {
+
+    // }
 }
