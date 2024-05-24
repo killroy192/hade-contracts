@@ -46,7 +46,13 @@ contract LedgerTest is Test {
         assertEq(ALICE.balance, parsedAmount);
     }
 
-    // function test_transfer(type name) {
-
-    // }
+    function test_transfer() external {
+        uint256 parsedAmount = deposit(1);
+        bytes32 newUtxoRoot = bytes32("new_utxoRoot");
+        LedgerLib.OutputUTXO[] memory outputUtxos = new LedgerLib.OutputUTXO[](1);
+        outputUtxos[0] = LedgerLib.OutputUTXO({value: parsedAmount, utxoRoot: newUtxoRoot});
+        ledger.commitTransfer(LedgerLib.createCommitHash(outputUtxos, utxoRoot));
+        ledger.transfer(outputUtxos, PROOF_SECRET, SPEND_SECRET);
+        assertEq(ledger.balanceOf(newUtxoRoot), parsedAmount);
+    }
 }
