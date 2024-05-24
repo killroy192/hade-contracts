@@ -1,0 +1,32 @@
+{
+  "name": "sol-starter",
+  "version": "0.1.0",
+  "description": "Template to bootstrap solidity project with foundry and hardhat",
+  "author": "Dzmitry Lahunouski",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com:dgma/sol-starter.git"
+  },
+  "bugs": {
+    "url": "https://github.com:dgma/sol-starter/issues"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  },
+  "devDependencies": {
+    "@dgma/hardhat-sol-bundler": "^0.5.7",
+    "@nomicfoundation/hardhat-foundry": "^1.1.2",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": ">=10.0.6",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.12.1",
+    "hardhat": "^2.22.4",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.4",
+    "prettier": "^3.2.5",
+    "solhint": "^5.0.1",
+    "solidity-coverage": "^0.8.12"
+  }
+}
