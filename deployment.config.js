@@ -1,30 +1,26 @@
+const { dynamicAddress } = require("@dgma/hardhat-sol-bundler");
 const { VerifyPlugin } = require("@dgma/hardhat-sol-bundler/plugins/Verify");
 
 const config = {
-  Template: {},
+  LedgerLib: {},
+  Ledger: {
+    options: {
+      libs: {
+        LedgerLib: dynamicAddress("LedgerLib"),
+      },
+    },
+  },
 };
 
 module.exports = {
   hardhat: {
-    config: config,
+    config,
   },
-  localhost: { lockFile: "./local.deployment-lock.json", config: config },
+  localhost: { lockFile: "./local.deployment-lock.json", config },
   arbitrumSepolia: {
     lockFile: "./deployment-lock.json",
     verify: true,
     plugins: [VerifyPlugin],
-    config: config,
-  },
-  baseSepolia: {
-    lockFile: "./deployment-lock.json",
-    verify: true,
-    plugins: [VerifyPlugin],
-    config: config,
-  },
-  opSepolia: {
-    lockFile: "./deployment-lock.json",
-    verify: true,
-    plugins: [VerifyPlugin],
-    config: config,
+    config,
   },
 };

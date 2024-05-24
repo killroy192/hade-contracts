@@ -38,22 +38,10 @@ module.exports = {
       accounts: deployerAccounts,
       deployment: deployments.arbitrumSepolia,
     },
-    baseSepolia: {
-      url: config?.parsed?.BASE_SEPOLIA_RPC || DEFAULT_RPC,
-      accounts: deployerAccounts,
-      deployment: deployments.baseSepolia,
-    },
-    opSepolia: {
-      url: config?.parsed?.OP_SEPOLIA_RPC || DEFAULT_RPC,
-      accounts: deployerAccounts,
-      deployment: deployments.opSepolia,
-    },
   },
   etherscan: {
     apiKey: {
-      baseSepolia: config?.parsed?.BASE_API_KEY,
       arbitrumSepolia: config?.parsed?.ARBISCAN_API_KEY,
-      opSepolia: config?.parsed?.OP_API_KEY,
     },
     customChains: [
       {
@@ -63,23 +51,7 @@ module.exports = {
           apiURL: "https://api-sepolia.arbiscan.io/api",
           browserURL: "https://sepolia-explorer.arbitrum.io",
         },
-      },
-      {
-        network: "baseSepolia",
-        chainId: 84532,
-        urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
-          browserURL: "https://sepolia.basescan.org/",
-        },
-      },
-      {
-        network: "opSepolia",
-        chainId: 11155420,
-        urls: {
-          apiURL: "​https://api-sepolia-optimistic.etherscan.io/api​",
-          browserURL: "https://sepolia-optimistic.etherscan.io",
-        },
-      },
+      }
     ],
   },
 };

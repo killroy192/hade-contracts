@@ -17,6 +17,7 @@ library LedgerLib {
         returns (bytes32 value)
     {
         /// @solidity memory-safe-assembly
+        // solhint-disable no-inline-assembly
         assembly {
             mstore(0x00, proofSecret)
             mstore(0x20, spendSecret)
