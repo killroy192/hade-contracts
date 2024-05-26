@@ -7,16 +7,18 @@ pragma solidity ^0.8.16;
 
 import "@std/Test.sol";
 
+import {MarketManager} from "src/MarketManager.sol";
 import {
-    MarketManager,
-    MarketConfig,
     Market,
+    MarketConfig,
     MarketIsNotExist,
-    RedeemSession
-} from "src/MarketManager.sol";
+    RedeemSession,
+    MintSession
+} from "src/MarketManager.types.sol";
+
 import {HadeToken} from "src/HadeToken.sol";
-import {PeriodsLib} from "src/PeriodsLib.sol";
-import {TokenMath} from "src/TokenMath.sol";
+import {PeriodsLib} from "src/libs/PeriodsLib.sol";
+import {TokenMath} from "src/libs/TokenMath.sol";
 
 import {MockStrikeOracle} from "./mocks/MockStrikeOracle.sol";
 import {TestUtils} from "./TestUtils.sol";
@@ -56,7 +58,7 @@ contract MarketManagerTest is Test {
         assertEq(HadeToken(m.token).name(), "hdmWETH_mUSDC_weekly_classic");
     }
 
-    function test_mint_not_redemption_session() external {
+    function test_mint_not_mint_session() external {
         bytes32 id = mmanager.create(config);
         Market memory m = mmanager.getMarket(id);
         vm.roll(m.state.lastRoll + m.config.period - 1);
@@ -64,10 +66,20 @@ contract MarketManagerTest is Test {
         mmanager.mint(id, 10);
     }
 
-    function test_mint_not_exist() external {
+    function test_mint_not_exist_market() external {
         bytes32 id = keccak256("not_exists");
         vm.expectRevert(abi.encodeWithSelector(MarketIsNotExist.selector));
         mmanager.mint(id, 10);
+    }
+
+    function _mint(uint256 token0Amount, uint256 token1Amount) private returns (bytes32) {
+        bytes32 id = mmanager.create(config);
+        startHoax(ALICE);
+        token0.approve(address(mmanager), token0Amount);
+        token1.approve(address(mmanager), token1Amount);
+        mmanager.mint(id, token0Amount);
+        vm.stopPrank();
+        return id;
     }
 
     /**
@@ -93,5 +105,45 @@ contract MarketManagerTest is Test {
             assertEq(mmanager.getShares(id, ALICE), token0Amount);
             assertEq(mmanager.getPosition(id, ALICE), 0);
         }
+    }
+
+    function test_redeem_not_exis_market() external {
+        bytes32 id = keccak256("not_exists");
+        vm.expectRevert(abi.encodeWithSelector(MarketIsNotExist.selector));
+        mmanager.redeem(id, 0, address(token0));
+    }
+
+    function test_redeem_not_redemption_session() external {
+        uint256 toMintToken0 = token0.balanceOf(ALICE);
+        uint256 toMintToken1 =
+            uint256(toMintToken0).convert(strikeOracle.getStrike(), address(strikeOracle));
+        bytes32 id = _mint(toMintToken0, toMintToken1);
+        Market memory m = mmanager.getMarket(id);
+        vm.roll(m.state.lastRoll + m.config.period - PeriodsLib.REDEEM_PERIOD);
+        startHoax(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(MintSession.selector));
+        mmanager.redeem(id, toMintToken0, address(token0));
+    }
+
+    /**
+     * @dev can't use uint256 since overflow
+     */
+    function testFuzz_redeem(uint232 toMintToken0) external {
+        vm.assume(toMintToken0 <= token0.balanceOf(ALICE));
+        uint256 toMintToken1 =
+            uint256(toMintToken0).convert(strikeOracle.getStrike(), address(strikeOracle));
+        bytes32 id = _mint(toMintToken0, toMintToken1);
+        Market memory m = mmanager.getMarket(id);
+        vm.roll(m.state.lastRoll + m.config.period);
+        startHoax(ALICE);
+        m.token.approve(address(mmanager), toMintToken0);
+        mmanager.redeem(id, toMintToken0, address(token0));
+        vm.stopPrank();
+        assertEq(HadeToken(m.token).balanceOf(ALICE), 0);
+        assertEq(token0.balanceOf(address(mmanager)), 0);
+        assertEq(token0.balanceOf(ALICE), TestUtils.to256dec(1, token0.decimals()));
+        assertEq(token1.balanceOf(address(mmanager)), 0);
+        assertEq(token1.balanceOf(ALICE), TestUtils.to256dec(1000, token0.decimals()));
+        assertEq(mmanager.getShares(id, ALICE), 0);
     }
 }

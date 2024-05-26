@@ -8,7 +8,7 @@ import {AggregatorV3Interface} from
 
 import {IStrikeOracle, StrikeTypes, ForbiddenValue} from "./StrikeOracle.types.sol";
 
-import {TokenMath} from "src/TokenMath.sol";
+import {TokenMath} from "src/libs/TokenMath.sol";
 
 contract StrikeOracle is IStrikeOracle {
     using SafeCast for int256;

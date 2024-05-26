@@ -7,7 +7,7 @@ pragma solidity ^0.8.16;
 
 import "@std/Test.sol";
 
-import {ListIsEmpty, LinkedList, LinkedListLibrary} from "src/LinkedList.sol";
+import {ListIsEmpty, LinkedList, LinkedListLibrary} from "src/libs/LinkedList.sol";
 
 contract LinkedListTest is Test {
     using LinkedListLibrary for LinkedList;

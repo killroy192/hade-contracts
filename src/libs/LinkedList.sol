@@ -99,11 +99,7 @@ library LinkedListLibrary {
         }
     }
 
-    function remove(LinkedList storage list, address value)
-        external
-        notEmpty(list)
-        exist(list, value)
-    {
+    function remove(LinkedList storage list, address value) external exist(list, value) {
         _omit(list, value);
         delete list.next[value];
         delete list.prev[value];
@@ -117,7 +113,6 @@ library LinkedListLibrary {
     function position(LinkedList storage list, address value)
         external
         view
-        notEmpty(list)
         exist(list, value)
         returns (uint256)
     {

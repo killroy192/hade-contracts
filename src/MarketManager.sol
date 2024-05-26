@@ -2,47 +2,32 @@
 pragma solidity ^0.8.16;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+import {LinkedList, LinkedListLibrary} from "src/libs/LinkedList.sol";
+import {PeriodsLib} from "src/libs/PeriodsLib.sol";
+import {TokenMath} from "src/libs/TokenMath.sol";
+
 import {HadeToken} from "src/HadeToken.sol";
-import {LinkedList, LinkedListLibrary} from "src/LinkedList.sol";
 import {IStrikeOracle, StrikeTypes} from "src/strikeOracle/StrikeOracle.types.sol";
-import {PeriodsLib} from "src/PeriodsLib.sol";
-import {TokenMath} from "src/TokenMath.sol";
-
-error UnsupportedPeriod(uint32 period);
-error MarketAlreadyCreated();
-error MarketIsNotExist();
-error RollingTooEarly();
-error RedeemSession();
-error MintSession();
-error InvalidToken();
-
-struct MarketConfig {
-    address token0;
-    address token1;
-    address oracle;
-    uint32 period;
-}
-
-struct MarketState {
-    uint256 strike;
-    uint256 lastRoll;
-}
-
-struct Market {
-    MarketConfig config;
-    MarketState state;
-    HadeToken token;
-}
+import {
+    IMarketManager,
+    Market,
+    MarketState,
+    MarketConfig,
+    UnsupportedPeriod,
+    MarketAlreadyCreated,
+    MarketIsNotExist,
+    RollingTooEarly,
+    RedeemSession,
+    MintSession
+} from "src/MarketManager.types.sol";
 
 /**
  * @dev PoC supports only 16dec ERC
  */
-contract MarketManager is ReentrancyGuard {
+contract MarketManager is IMarketManager, ReentrancyGuard {
     using LinkedListLibrary for LinkedList;
-    using Math for uint256;
     using TokenMath for uint256;
 
     mapping(bytes32 => Market) private markets;
@@ -85,13 +70,6 @@ contract MarketManager is ReentrancyGuard {
                 && block.number <= market.state.lastRoll + market.config.period
         ) {
             revert MintSession();
-        }
-        _;
-    }
-
-    modifier validToken(Market memory market, address token) {
-        if (market.config.token0 != token || market.config.token1 != token) {
-            revert InvalidToken();
         }
         _;
     }
@@ -181,7 +159,6 @@ contract MarketManager is ReentrancyGuard {
         private
         marketExist(market)
         canRedeem(market)
-        validToken(market, token)
     {
         MarketState memory state = market.state;
         MarketConfig memory config = market.config;
@@ -196,14 +173,14 @@ contract MarketManager is ReentrancyGuard {
             uint256 toWithdraw = balance >= change ? change : balance;
 
             if (token == config.token0) {
-                ERC20(config.token0).transferFrom(address(this), msg.sender, toWithdraw);
-                ERC20(config.token1).transferFrom(
-                    address(this), owner, toWithdraw.convert(state.strike, config.oracle)
+                ERC20(config.token0).transfer(msg.sender, toWithdraw);
+                ERC20(config.token1).transfer(
+                    owner, toWithdraw.convert(state.strike, config.oracle)
                 );
             } else {
-                ERC20(config.token0).transferFrom(address(this), owner, toWithdraw);
-                ERC20(config.token1).transferFrom(
-                    address(this), msg.sender, toWithdraw.convert(state.strike, config.oracle)
+                ERC20(config.token0).transfer(owner, toWithdraw);
+                ERC20(config.token1).transfer(
+                    msg.sender, toWithdraw.convert(state.strike, config.oracle)
                 );
             }
 
