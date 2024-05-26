@@ -52,6 +52,14 @@ contract LinkedListTest is Test {
         assertEq(list.prev[BOB], ALICE);
     }
 
+    function test_position() external {
+        fill();
+        assertEq(list.position(ALICE), 0);
+        assertEq(list.position(BOB), 1);
+        assertEq(list.position(DAN), 2);
+        assertEq(list.position(CLAUS), 3);
+    }
+
     function testFuzz_shift(uint8 rounds) external {
         vm.assume(rounds < 5);
         fill();
@@ -81,6 +89,11 @@ contract LinkedListTest is Test {
         assertEq(list.head, ALICE);
         assertEq(list.next[ALICE], BOB);
         assertEq(list.prev[BOB], ALICE);
+
+        assertEq(list.position(ALICE), 0);
+        assertEq(list.position(BOB), 1);
+        assertEq(list.position(DAN), 2);
+        assertEq(list.position(CLAUS), 3);
     }
 
     function test_reorg_middle() external {
@@ -91,6 +104,11 @@ contract LinkedListTest is Test {
         assertEq(list.prev[BOB], address(0));
         assertEq(list.next[ALICE], DAN);
         assertEq(list.prev[ALICE], BOB);
+
+        assertEq(list.position(ALICE), 1);
+        assertEq(list.position(BOB), 0);
+        assertEq(list.position(DAN), 2);
+        assertEq(list.position(CLAUS), 3);
     }
 
     function test_reorg_tail() external {
@@ -102,5 +120,10 @@ contract LinkedListTest is Test {
         assertEq(list.tail, DAN);
         assertEq(list.next[DAN], address(0));
         assertEq(list.prev[DAN], BOB);
+
+        assertEq(list.position(ALICE), 1);
+        assertEq(list.position(BOB), 2);
+        assertEq(list.position(DAN), 3);
+        assertEq(list.position(CLAUS), 0);
     }
 }

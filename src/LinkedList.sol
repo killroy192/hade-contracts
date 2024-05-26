@@ -109,4 +109,34 @@ library LinkedListLibrary {
         delete list.prev[value];
         list.length -= 1;
     }
+
+    /**
+     * @dev use only for test porposes
+     * todo migrate to dev utils
+     */
+    function position(LinkedList storage list, address value)
+        external
+        view
+        notEmpty(list)
+        exist(list, value)
+        returns (uint256)
+    {
+        if (list.head == value) {
+            return 0;
+        }
+
+        if (list.tail == value) {
+            return list.length - 1;
+        }
+
+        address candidate = list.next[list.head];
+        uint256 order = 1;
+
+        while (order < list.length && candidate != value) {
+            candidate = list.next[candidate];
+            order += 1;
+        }
+
+        return order;
+    }
 }

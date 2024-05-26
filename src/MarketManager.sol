@@ -111,6 +111,14 @@ contract MarketManager is ReentrancyGuard {
         return markets[id];
     }
 
+    function getShares(bytes32 id, address owner) external view returns (uint256) {
+        return marketLedgers[id][owner];
+    }
+
+    function getPosition(bytes32 id, address owner) external view returns (uint256) {
+        return marketQs[id].position(owner);
+    }
+
     function create(MarketConfig calldata config) external returns (bytes32 id) {
         id = marketId(config);
         Market storage market = markets[id];

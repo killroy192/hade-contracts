@@ -7,7 +7,13 @@ pragma solidity ^0.8.16;
 
 import "@std/Test.sol";
 
-import {MarketManager, MarketConfig, Market} from "src/MarketManager.sol";
+import {
+    MarketManager,
+    MarketConfig,
+    Market,
+    MarketIsNotExist,
+    RedeemSession
+} from "src/MarketManager.sol";
 import {HadeToken} from "src/HadeToken.sol";
 import {PeriodsLib} from "src/PeriodsLib.sol";
 import {TokenMath} from "src/TokenMath.sol";
@@ -50,6 +56,20 @@ contract MarketManagerTest is Test {
         assertEq(HadeToken(m.token).name(), "hdmWETH_mUSDC_weekly_classic");
     }
 
+    function test_mint_not_redemption_session() external {
+        bytes32 id = mmanager.create(config);
+        Market memory m = mmanager.getMarket(id);
+        vm.roll(m.state.lastRoll + m.config.period - 1);
+        vm.expectRevert(abi.encodeWithSelector(RedeemSession.selector));
+        mmanager.mint(id, 10);
+    }
+
+    function test_mint_not_exist() external {
+        bytes32 id = keccak256("not_exists");
+        vm.expectRevert(abi.encodeWithSelector(MarketIsNotExist.selector));
+        mmanager.mint(id, 10);
+    }
+
     /**
      * @dev can't use uint256 since overflow
      */
@@ -70,6 +90,8 @@ contract MarketManagerTest is Test {
             assertEq(HadeToken(m.token).balanceOf(ALICE), token0Amount);
             assertEq(token0.balanceOf(address(mmanager)), token0Amount);
             assertEq(token1.balanceOf(address(mmanager)), token1Amount);
+            assertEq(mmanager.getShares(id, ALICE), token0Amount);
+            assertEq(mmanager.getPosition(id, ALICE), 0);
         }
     }
 }
