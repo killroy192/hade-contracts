@@ -9,9 +9,11 @@ enum StrikeTypes {
 }
 
 interface IStrikeOracle {
-    function decimals() external pure returns (uint256);
+    function decimals() external pure returns (uint8);
     // oracle defines how to set strike
     function getStrike(uint256 prevStrike) external view returns (uint256);
+
+    function getStrike() external view returns (uint256);
 
     function getStrikeType() external view returns (StrikeTypes);
 }

@@ -8,7 +8,6 @@ pragma solidity ^0.8.16;
 import "@std/Test.sol";
 
 import {ListIsEmpty, LinkedList, LinkedListLibrary} from "src/LinkedList.sol";
-import {TestUtils} from "./TestUtils.sol";
 
 contract LinkedListTest is Test {
     using LinkedListLibrary for LinkedList;

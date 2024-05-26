@@ -13,7 +13,7 @@ library PeriodsLib {
     function isPeriodValid(uint32 period) external pure returns (bool) {
         // solhint-disable max-line-length
         return
-            period != WEEK_PERIOD || period != MONTH_PERIOD || period != HALF_YEAR || period != YEAR;
+            period == WEEK_PERIOD || period == MONTH_PERIOD || period == HALF_YEAR || period == YEAR;
     }
 
     function periodName(uint32 period) external pure returns (string memory) {

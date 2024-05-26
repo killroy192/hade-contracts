@@ -8,8 +8,11 @@ import {AggregatorV3Interface} from
 
 import {IStrikeOracle, StrikeTypes, ForbiddenValue} from "./StrikeOracle.types.sol";
 
+import {TokenMath} from "src/TokenMath.sol";
+
 contract StrikeOracle is IStrikeOracle {
     using SafeCast for int256;
+    using TokenMath for uint256;
 
     AggregatorV3Interface private dataFeed;
     StrikeTypes private strikeType;
@@ -19,22 +22,20 @@ contract StrikeOracle is IStrikeOracle {
         strikeType = _strikeType;
     }
 
-    function decimals() public pure returns (uint256) {
+    function decimals() public pure returns (uint8) {
         return 16;
     }
 
-    function _scalePrice(uint256 price) private view returns (uint256) {
-        uint256 priceDecimals = dataFeed.decimals();
-        uint256 dec = decimals();
-        if (priceDecimals < dec) {
-            return price * 10 ** uint256(dec - priceDecimals);
-        } else if (priceDecimals > dec) {
-            return price / 10 ** uint256(priceDecimals - dec);
+    function getStrike(uint256 prevStrike) external view returns (uint256) {
+        uint256 formattedPrice = getStrike();
+
+        if (strikeType == StrikeTypes.UpOnly) {
+            return prevStrike < formattedPrice ? formattedPrice : prevStrike;
         }
-        return price;
+        return formattedPrice;
     }
 
-    function getStrike(uint256 prevStrike) external view returns (uint256) {
+    function getStrike() public view returns (uint256) {
         (
             /* uint80 roundID */
             ,
@@ -52,12 +53,7 @@ contract StrikeOracle is IStrikeOracle {
             revert ForbiddenValue(price);
         }
 
-        uint256 formattedPrice = _scalePrice(price);
-
-        if (strikeType == StrikeTypes.UpOnly) {
-            return prevStrike < formattedPrice ? formattedPrice : prevStrike;
-        }
-        return formattedPrice;
+        return price.scale(dataFeed.decimals(), decimals());
     }
 
     function getStrikeType() external view returns (StrikeTypes) {

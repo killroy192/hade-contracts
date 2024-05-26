@@ -9,13 +9,14 @@ import {HadeToken} from "src/HadeToken.sol";
 import {LinkedList, LinkedListLibrary} from "src/LinkedList.sol";
 import {IStrikeOracle, StrikeTypes} from "src/strikeOracle/StrikeOracle.types.sol";
 import {PeriodsLib} from "src/PeriodsLib.sol";
+import {TokenMath} from "src/TokenMath.sol";
 
-error WrongMarketPeriod(uint32 period);
+error UnsupportedPeriod(uint32 period);
 error MarketAlreadyCreated();
 error MarketIsNotExist();
 error RollingTooEarly();
-error RedeemPeriod();
-error MintPeriod();
+error RedeemSession();
+error MintSession();
 error InvalidToken();
 
 struct MarketConfig {
@@ -36,17 +37,21 @@ struct Market {
     HadeToken token;
 }
 
+/**
+ * @dev PoC supports only 16dec ERC
+ */
 contract MarketManager is ReentrancyGuard {
     using LinkedListLibrary for LinkedList;
     using Math for uint256;
+    using TokenMath for uint256;
 
-    mapping(bytes32 => Market) public markets;
-    mapping(bytes32 => LinkedList) public marketQs;
-    mapping(bytes32 => mapping(address => uint256)) public marketLedgers;
+    mapping(bytes32 => Market) private markets;
+    mapping(bytes32 => LinkedList) private marketQs;
+    mapping(bytes32 => mapping(address => uint256)) private marketLedgers;
 
     modifier validPeriod(uint32 period) {
-        if (PeriodsLib.isPeriodValid(period)) {
-            revert WrongMarketPeriod(period);
+        if (!PeriodsLib.isPeriodValid(period)) {
+            revert UnsupportedPeriod(period);
         }
         _;
     }
@@ -66,9 +71,10 @@ contract MarketManager is ReentrancyGuard {
     }
 
     modifier canMint(Market memory market) {
-        if (market.state.lastRoll + market.config.period - PeriodsLib.REDEEM_PERIOD > block.number)
-        {
-            revert RedeemPeriod();
+        uint256 endMintBlock =
+            market.state.lastRoll + market.config.period - PeriodsLib.REDEEM_PERIOD;
+        if (block.number >= endMintBlock) {
+            revert RedeemSession();
         }
         _;
     }
@@ -78,7 +84,7 @@ contract MarketManager is ReentrancyGuard {
             market.state.lastRoll + market.config.period - PeriodsLib.REDEEM_PERIOD >= block.number
                 && block.number <= market.state.lastRoll + market.config.period
         ) {
-            revert MintPeriod();
+            revert MintSession();
         }
         _;
     }
@@ -97,57 +103,52 @@ contract MarketManager is ReentrancyGuard {
         return "_up";
     }
 
-    function marketId(MarketConfig calldata marketConfig) public pure returns (bytes32) {
-        return keccak256(abi.encode(marketConfig));
+    function marketId(MarketConfig calldata config) public pure returns (bytes32) {
+        return keccak256(abi.encode(config));
     }
 
-    function create(MarketConfig calldata marketConfig) external {
-        _create(marketId(marketConfig), marketConfig);
+    function getMarket(bytes32 id) external view returns (Market memory) {
+        return markets[id];
     }
 
-    function _create(bytes32 id, MarketConfig calldata marketConfig)
+    function create(MarketConfig calldata config) external returns (bytes32 id) {
+        id = marketId(config);
+        Market storage market = markets[id];
+        _create(market, config);
+    }
+
+    function _create(Market storage market, MarketConfig calldata config)
         private
-        marketNotExist(markets[id])
-        validPeriod(marketConfig.period)
+        marketNotExist(market)
+        validPeriod(config.period)
     {
-        markets[id].config = marketConfig;
+        market.config = config;
         string memory tokenName = string(
             abi.encodePacked(
                 "hd",
-                ERC20(marketConfig.token0).symbol(),
+                ERC20(config.token0).symbol(),
                 "_",
-                ERC20(marketConfig.token1).symbol(),
+                ERC20(config.token1).symbol(),
                 "_",
-                PeriodsLib.periodName(marketConfig.period),
-                typeName(IStrikeOracle(marketConfig.oracle).getStrikeType())
+                PeriodsLib.periodName(config.period),
+                typeName(IStrikeOracle(config.oracle).getStrikeType())
             )
         );
-        markets[id].token = new HadeToken(
+        market.token = new HadeToken(
             tokenName,
             tokenName
         );
+        market.state =
+            MarketState({strike: IStrikeOracle(config.oracle).getStrike(), lastRoll: block.number});
     }
 
-    function roll(bytes32 id) external marketExist(markets[id]) {
-        Market storage market = markets[id];
-        MarketState memory state = market.state;
-        MarketConfig memory config = market.config;
-        if (state.lastRoll + config.period < block.number) {
-            revert RollingTooEarly();
-        }
-        market.state = MarketState({
-            strike: IStrikeOracle(config.oracle).getStrike(state.strike),
-            lastRoll: state.lastRoll + config.period
-        });
-    }
-
-    function mint(bytes32 id, uint256 amount) external nonReentrant {
-        _mint(markets[id], amount);
+    function mint(bytes32 id, uint256 token0Amount) external nonReentrant {
+        _mint(markets[id], token0Amount);
         marketQs[id].reorg(msg.sender);
-        marketLedgers[id][msg.sender] = amount;
+        marketLedgers[id][msg.sender] += token0Amount;
     }
 
-    function _mint(Market memory market, uint256 amount)
+    function _mint(Market memory market, uint256 token0Amount)
         private
         marketExist(market)
         canMint(market)
@@ -155,10 +156,12 @@ contract MarketManager is ReentrancyGuard {
         MarketState memory state = market.state;
         MarketConfig memory config = market.config;
 
-        ERC20(config.token0).transferFrom(msg.sender, address(this), amount);
-        ERC20(config.token1).transferFrom(msg.sender, address(this), amount * state.strike);
+        ERC20(config.token0).transferFrom(msg.sender, address(this), token0Amount);
+        ERC20(config.token1).transferFrom(
+            msg.sender, address(this), token0Amount.convert(state.strike, config.oracle)
+        );
 
-        market.token.mintTo(msg.sender, amount);
+        market.token.mintTo(msg.sender, token0Amount);
         // rebalance according to new ratio - out of PoC
     }
 
@@ -186,11 +189,13 @@ contract MarketManager is ReentrancyGuard {
 
             if (token == config.token0) {
                 ERC20(config.token0).transferFrom(address(this), msg.sender, toWithdraw);
-                ERC20(config.token1).transferFrom(address(this), owner, toWithdraw * state.strike);
+                ERC20(config.token1).transferFrom(
+                    address(this), owner, toWithdraw.convert(state.strike, config.oracle)
+                );
             } else {
                 ERC20(config.token0).transferFrom(address(this), owner, toWithdraw);
                 ERC20(config.token1).transferFrom(
-                    address(this), msg.sender, toWithdraw * state.strike
+                    address(this), msg.sender, toWithdraw.convert(state.strike, config.oracle)
                 );
             }
 
@@ -204,7 +209,23 @@ contract MarketManager is ReentrancyGuard {
         }
     }
 
-    // OUT of PoC scope
+    /**
+     * @dev MVP oos
+     */
+
+    function roll(bytes32 id) external marketExist(markets[id]) {
+        Market storage market = markets[id];
+        MarketConfig memory config = market.config;
+        MarketState memory state = market.state;
+        if (state.lastRoll + config.period > block.number) {
+            revert RollingTooEarly();
+        }
+        market.state = MarketState({
+            strike: IStrikeOracle(config.oracle).getStrike(state.strike),
+            lastRoll: state.lastRoll + config.period
+        });
+    }
+
     function cancelRolling(bytes32 id) external canRedeem(markets[id]) {
         // create new additional q for forced redemptions
     }
