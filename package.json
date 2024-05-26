@@ -12,6 +12,7 @@
     "url": "https://github.com:dgma/sol-starter/issues"
   },
   "dependencies": {
+    "@chainlink/contracts": "^1.1.1",
     "@openzeppelin/contracts": "^5.0.2"
   },
   "devDependencies": {
