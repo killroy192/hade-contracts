@@ -8,6 +8,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {HadeToken} from "src/HadeToken.sol";
 import {LinkedList, LinkedListLibrary} from "src/LinkedList.sol";
 import {IStrikeOracle, StrikeTypes} from "src/strikeOracle/StrikeOracle.types.sol";
+import {PeriodsLib} from "src/PeriodsLib.sol";
 
 error WrongMarketPeriod(uint32 period);
 error MarketAlreadyCreated();
@@ -39,20 +40,12 @@ contract MarketManager is ReentrancyGuard {
     using LinkedListLibrary for LinkedList;
     using Math for uint256;
 
-    uint32 public constant REDEEM_PERIOD = 7200; // ~ 1 day
-    uint32 public constant WEEK_PERIOD = 50400;
-    uint32 public constant MONTH_PERIOD = 216000;
-    uint32 public constant HALF_YEAR = 1296000;
-    uint32 public constant YEAR = 2628000;
-
     mapping(bytes32 => Market) public markets;
     mapping(bytes32 => LinkedList) public marketQs;
     mapping(bytes32 => mapping(address => uint256)) public marketLedgers;
 
     modifier validPeriod(uint32 period) {
-        if (
-            period != WEEK_PERIOD || period != MONTH_PERIOD || period != HALF_YEAR || period != YEAR
-        ) {
+        if (PeriodsLib.isPeriodValid(period)) {
             revert WrongMarketPeriod(period);
         }
         _;
@@ -73,7 +66,8 @@ contract MarketManager is ReentrancyGuard {
     }
 
     modifier canMint(Market memory market) {
-        if (market.state.lastRoll + market.config.period - REDEEM_PERIOD > block.number) {
+        if (market.state.lastRoll + market.config.period - PeriodsLib.REDEEM_PERIOD > block.number)
+        {
             revert RedeemPeriod();
         }
         _;
@@ -81,7 +75,7 @@ contract MarketManager is ReentrancyGuard {
 
     modifier canRedeem(Market memory market) {
         if (
-            market.state.lastRoll + market.config.period - REDEEM_PERIOD >= block.number
+            market.state.lastRoll + market.config.period - PeriodsLib.REDEEM_PERIOD >= block.number
                 && block.number <= market.state.lastRoll + market.config.period
         ) {
             revert MintPeriod();
@@ -94,19 +88,6 @@ contract MarketManager is ReentrancyGuard {
             revert InvalidToken();
         }
         _;
-    }
-
-    function periodName(uint32 period) private pure returns (string memory) {
-        if (period == WEEK_PERIOD) {
-            return "_weekly";
-        }
-        if (period == MONTH_PERIOD) {
-            return "_monthly";
-        }
-        if (period == HALF_YEAR) {
-            return "_half_year";
-        }
-        return "_yearly";
     }
 
     function typeName(StrikeTypes strikeType) private pure returns (string memory) {
@@ -136,7 +117,8 @@ contract MarketManager is ReentrancyGuard {
                 ERC20(marketConfig.token0).symbol(),
                 "_",
                 ERC20(marketConfig.token1).symbol(),
-                periodName(marketConfig.period),
+                "_",
+                PeriodsLib.periodName(marketConfig.period),
                 typeName(IStrikeOracle(marketConfig.oracle).getStrikeType())
             )
         );
