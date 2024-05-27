@@ -10,16 +10,12 @@ contract MockOracle is IOracle {
 
     uint256 private _price = 1000;
 
-    function decimals() public pure returns (uint8) {
-        return 16;
+    function getExposurePrice(uint8 dec) public view returns (uint256) {
+        return _price * 10 ** dec;
     }
 
-    function getExposurePrice() external view returns (uint256) {
-        return _price * 10 ** decimals();
-    }
-
-    function getHedgePrice() external view returns (uint256) {
-        return uint256(1).mulDiv(decimals(), _price);
+    function getHedgePrice(uint8 dec) external view returns (uint256) {
+        return uint256(1 * 10 ** dec).mulDiv(10 ** dec, getExposurePrice(dec));
     }
 
     function setPrice(uint256 exposurePrice) external {

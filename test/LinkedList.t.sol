@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
-
 pragma solidity ^0.8.16;
 
 // solhint-disable no-global-import
 // solhint-disable no-console
-
 import "@std/Test.sol";
 
-import {ListIsEmpty, LinkedList, LinkedListLibrary} from "src/registry/libs/LinkedList.sol";
+import {LinkedList, LinkedListLibrary} from "src/registry/libs/LinkedList.sol";
 
 contract LinkedListTest is Test {
     using LinkedListLibrary for LinkedList;
@@ -52,12 +50,16 @@ contract LinkedListTest is Test {
         assertEq(list.prev[BOB], ALICE);
     }
 
-    function test_position() external {
-        fill();
-        assertEq(list.position(ALICE), 0);
-        assertEq(list.position(BOB), 1);
-        assertEq(list.position(DAN), 2);
-        assertEq(list.position(CLAUS), 3);
+    function test_isEmpty() external {
+        assertEq(list.isEmpty(), true);
+        list.push(ALICE);
+        assertEq(list.isEmpty(), false);
+    }
+
+    function test_isExist() external {
+        assertEq(list.isExist(ALICE), false);
+        list.push(ALICE);
+        assertEq(list.isExist(ALICE), true);
     }
 
     function test_toList() external {
@@ -68,70 +70,14 @@ contract LinkedListTest is Test {
         assertEq(arr[1], DAN);
     }
 
-    function testFuzz_shift(uint8 rounds) external {
-        vm.assume(rounds < 5);
+    function test_remove() external {
         fill();
-        for (uint8 i = 0; i < rounds; i++) {
-            if (i > 3) {
-                vm.expectRevert(abi.encodeWithSelector(ListIsEmpty.selector));
-            }
-            list.shift();
-        }
-        if (rounds > 0) {
-            assertLe(list.length, 4);
-        }
-    }
-
-    function test_shift() external {
-        fill();
-        address firstShift = list.shift();
-        address secondShift = list.shift();
-        assertEq(firstShift, ALICE);
-        assertEq(secondShift, BOB);
-        assertEq(list.length, 2);
-    }
-
-    function test_reorg_head() external {
-        fill();
-        list.reorg(ALICE);
+        list.remove(DAN);
+        assertEq(list.length, 3);
+        assertEq(list.isExist(DAN), false);
         assertEq(list.head, ALICE);
         assertEq(list.next[ALICE], BOB);
-        assertEq(list.prev[BOB], ALICE);
-
-        assertEq(list.position(ALICE), 0);
-        assertEq(list.position(BOB), 1);
-        assertEq(list.position(DAN), 2);
-        assertEq(list.position(CLAUS), 3);
-    }
-
-    function test_reorg_middle() external {
-        fill();
-        list.reorg(BOB);
-        assertEq(list.head, BOB);
-        assertEq(list.next[BOB], ALICE);
-        assertEq(list.prev[BOB], address(0));
-        assertEq(list.next[ALICE], DAN);
-        assertEq(list.prev[ALICE], BOB);
-
-        assertEq(list.position(ALICE), 1);
-        assertEq(list.position(BOB), 0);
-        assertEq(list.position(DAN), 2);
-        assertEq(list.position(CLAUS), 3);
-    }
-
-    function test_reorg_tail() external {
-        fill();
-        list.reorg(CLAUS);
-        assertEq(list.head, CLAUS);
-        assertEq(list.next[CLAUS], ALICE);
-        assertEq(list.prev[ALICE], CLAUS);
-        assertEq(list.tail, DAN);
-        assertEq(list.next[DAN], address(0));
-        assertEq(list.prev[DAN], BOB);
-
-        assertEq(list.position(ALICE), 1);
-        assertEq(list.position(BOB), 2);
-        assertEq(list.position(DAN), 3);
-        assertEq(list.position(CLAUS), 0);
+        assertEq(list.next[BOB], CLAUS);
+        assertEq(list.tail, CLAUS);
     }
 }
