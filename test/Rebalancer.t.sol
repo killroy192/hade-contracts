@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 // solhint-disable no-global-import
 // solhint-disable no-console
 import "@std/Test.sol";
+import "forge-std/console.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -17,7 +18,9 @@ import {
     DepositProps,
     DepositForbidden,
     RedeemProps,
-    RedeemForbidden
+    RedeemForbidden,
+    SwapProps,
+    SwapForbidden
 } from "src/rebalancer/Rebalancer.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockRegistry} from "./mocks/MockRegistry.sol";
@@ -36,14 +39,14 @@ contract RebalancerTest is Test {
         hedgeToken: address(hedgeToken),
         oracle: address(oracle),
         registry: address(registry),
-        multiplier: 1001 * 10 ** 5, // 1.001 -> 0.1% premium
+        multiplier: 1001 * 10 ** 11, // 1.001 -> 0.1% premium
         rebalanceExposurePrice: oracle.getExposurePrice(hedgeToken.decimals())
     });
 
     address private immutable ALICE = makeAddr("alice");
     address private immutable BOB = makeAddr("BOB");
     uint256 private initExposureBalance = 10 * 10 ** exposureToken.decimals();
-    uint256 private initHedgeBalance = 10 * config.rebalanceExposurePrice;
+    uint256 private initHedgeBalance = initExposureBalance * config.rebalanceExposurePrice;
 
     function setUp() external {
         rebalancer = new Rebalancer(config);
@@ -135,7 +138,6 @@ contract RebalancerTest is Test {
         token.approve(address(rebalancer), depositAmount);
         vm.expectRevert(abi.encodeWithSelector(DepositForbidden.selector));
         rebalancer.deposit(depositAmount);
-        vm.stopPrank();
     }
 
     function _redeem(address user, uint256 shares)
@@ -179,6 +181,38 @@ contract RebalancerTest is Test {
         sharesToken.approve(address(rebalancer), aliceShares);
         vm.expectRevert(abi.encodeWithSelector(RedeemForbidden.selector));
         rebalancer.redeem(aliceShares);
-        vm.stopPrank();
+    }
+
+    function test_previewSwap() external {
+        _deposit(ALICE, 1);
+        _hedgeModeOn();
+        SwapProps memory sp = rebalancer.previewSwap(0);
+        assertEq(sp.tokenRebalancerSell, config.exposureToken);
+        assertEq(sp.tokenRebalancerBuy, config.hedgeToken);
+        assertEq(sp.sellPrice, 499500499500499);
+        assertEq(sp.amountToCollect, 0);
+    }
+
+    function testFuzz_swapp(uint256 amountUserBuy) external {
+        vm.assume(amountUserBuy <= exposureToken.balanceOf(ALICE));
+        _deposit(ALICE, 1);
+        _hedgeModeOn();
+        SwapProps memory sp = rebalancer.previewSwap(amountUserBuy);
+        ERC20 tokenRebalancerSell = ERC20(sp.tokenRebalancerSell);
+        uint256 totalSypplyToSell = tokenRebalancerSell.balanceOf(address(rebalancer));
+        vm.startPrank(ALICE);
+        hedgeToken.approve(address(rebalancer), hedgeToken.balanceOf(ALICE));
+        if (totalSypplyToSell < amountUserBuy) {
+            vm.expectRevert(abi.encodeWithSelector(SwapForbidden.selector));
+            rebalancer.swap(amountUserBuy);
+        } else if (totalSypplyToSell == amountUserBuy) {
+            rebalancer.swap(amountUserBuy);
+            assertEq(tokenRebalancerSell.balanceOf(address(rebalancer)), 0);
+        } else {
+            rebalancer.swap(amountUserBuy);
+            uint256 currentSupply = tokenRebalancerSell.balanceOf(address(rebalancer));
+            assertLe(currentSupply, totalSypplyToSell);
+            assertLe(0, currentSupply);
+        }
     }
 }

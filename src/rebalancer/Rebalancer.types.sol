@@ -6,11 +6,10 @@ error RedeemForbidden();
 error SwapForbidden();
 
 struct SwapProps {
-    address tokenToSell;
-    uint256 maxAmountToSell;
+    address tokenRebalancerSell;
+    address tokenRebalancerBuy;
     uint256 sellPrice;
-    address tokenToBuy;
-    uint256 buyPrice;
+    uint256 amountToCollect;
 }
 
 struct DepositProps {
@@ -55,10 +54,6 @@ interface IRebalancer {
 
     function initSharesToMint() external pure returns (uint256);
 
-    function previewSwap() external view returns (SwapProps memory);
-
-    function swap(uint256 amountToBuy) external;
-
     function previewDeposit(uint256 amount) external view returns (DepositProps memory);
 
     function deposit(uint256 amount) external;
@@ -66,6 +61,10 @@ interface IRebalancer {
     function previewRedeem(uint256 shares) external view returns (RedeemProps memory);
 
     function redeem(uint256 shares) external;
+
+    function previewSwap(uint256 amountUserBuy) external view returns (SwapProps memory);
+
+    function swap(uint256 amountUserBuy) external;
 
     function state() external view returns (SerializedState memory);
 

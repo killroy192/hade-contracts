@@ -59,8 +59,8 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
             );
 
         s = State({
-            exposureToken: ERC20(_config.exposureToken),
-            hedgeToken: ERC20(_config.hedgeToken),
+            exposureToken: exposureToken,
+            hedgeToken: hedgeToken,
             sharesToken: _sharesToken,
             oracle: IOracle(_config.oracle),
             multiplier: _config.multiplier,
@@ -142,7 +142,7 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         }
     }
 
-    function previewSwap() public view returns (SwapProps memory) {
+    function previewSwap(uint256 amountUserBuy) public view returns (SwapProps memory) {
         // h = usd
         // e = eth
         // hPrice = 0.1 e
@@ -156,45 +156,35 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         bool hedgeEnabled = ePrice < s.rebalanceExposurePrice;
 
         // sell exposureToken
-        ERC20 tokenToSell = hedgeEnabled ? s.exposureToken : s.hedgeToken;
+        ERC20 tokenRebalancerSell = hedgeEnabled ? s.exposureToken : s.hedgeToken;
         // buy hedgeToken
-        ERC20 tokenToBuy = hedgeEnabled ? s.hedgeToken : s.exposureToken;
+        ERC20 tokenRebalancerBuy = hedgeEnabled ? s.hedgeToken : s.exposureToken;
 
         // sell exposureToken -> ePrice / 1.1 -> 9.(09)
-        uint256 sellPrice = (hedgeEnabled ? ePrice : hPrice).mulDiv(decimals(), s.multiplier);
-        // buy hedgeToken -> hPrice * 1.1 -> 0.11
-        uint256 buyPrice = (hedgeEnabled ? hPrice : ePrice).mulDiv(s.multiplier, decimals());
+        uint256 sellPrice = (hedgeEnabled ? ePrice : hPrice).mulDiv(10 ** decimals(), s.multiplier);
 
-        // how many exposureToken can sell for hedgeToken
-        uint256 maxAmountToSell = tokenToSell.balanceOf(address(this)) * sellPrice;
+        uint256 amountToCollect = amountUserBuy * sellPrice;
 
         return SwapProps({
-            tokenToSell: address(tokenToSell),
-            maxAmountToSell: maxAmountToSell,
+            tokenRebalancerSell: address(tokenRebalancerSell),
+            tokenRebalancerBuy: address(tokenRebalancerBuy),
             sellPrice: sellPrice,
-            tokenToBuy: address(tokenToBuy),
-            buyPrice: buyPrice
+            amountToCollect: amountToCollect
         });
     }
 
     // amountToBuy -> amount to buy exposureToken
-    function swap(uint256 amountToBuy) external nonReentrant {
-        SwapProps memory sp = previewSwap();
-        if (sp.maxAmountToSell == 0 || sp.maxAmountToSell < amountToBuy) {
+    function swap(uint256 amountUserBuy) external nonReentrant {
+        SwapProps memory sp = previewSwap(amountUserBuy);
+        ERC20 tokenRebalancerSell = ERC20(sp.tokenRebalancerSell);
+        if (tokenRebalancerSell.balanceOf(address(this)) < amountUserBuy) {
             revert SwapForbidden();
         } else {
-            ERC20 btoken = ERC20(sp.tokenToBuy);
-            ERC20 stoken = ERC20(sp.tokenToSell);
-
-            uint256 amountToCollect = amountToBuy * sp.sellPrice;
-            btoken.transferFrom(msg.sender, address(this), amountToCollect);
-            stoken.transfer(address(this), amountToBuy);
+            ERC20 tokenRebalancerBuy = ERC20(sp.tokenRebalancerBuy);
+            tokenRebalancerBuy.transferFrom(msg.sender, address(this), sp.amountToCollect);
+            tokenRebalancerSell.transfer(address(this), amountUserBuy);
         }
     }
-
-    /**
-     * dev utils
-     */
 
     function state() external view returns (SerializedState memory) {
         return SerializedState({
