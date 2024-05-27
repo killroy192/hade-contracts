@@ -6,23 +6,22 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
-import {SharesToken} from "src/SharesToken.sol";
 import {IOracle} from "src/oracle/Oracle.types.sol";
-import {IRebalancerRegistry} from "src/registry/RebalancerRegistry.types.sol";
 
-import {RTypeLib} from "./libs/RTypeLib.sol";
+import {BTypeLib} from "./libs/BTypeLib.sol";
+import {SharesToken} from "./SharesToken.sol";
 import {
     Config,
     SwapProps,
     SerializedState,
-    RTypes,
-    IRebalancer,
+    BTypes,
+    IBalancer,
     DepositProps,
     RedeemProps,
     DepositForbidden,
     RedeemForbidden,
     SwapForbidden
-} from "./Rebalancer.types.sol";
+} from "./Balancer.types.sol";
 
 struct State {
     ERC20 exposureToken;
@@ -36,13 +35,13 @@ struct State {
 /**
  * todo add events
  */
-contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
+contract Balancer is IBalancer, ReentrancyGuard, ERC165 {
     using Math for uint256;
-    using RTypeLib for RTypes;
+    using BTypeLib for BTypes;
 
     State private s;
 
-    RTypes private constant rebType = RTypes.Tick;
+    BTypes private constant rebType = BTypes.Tick;
 
     // discount same decimals
     constructor(Config memory _config) {
@@ -66,12 +65,10 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
             multiplier: _config.multiplier,
             rebalanceExposurePrice: _config.rebalanceExposurePrice
         });
-
-        IRebalancerRegistry(_config.registry).register(address(this));
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
-        return interfaceId == type(IRebalancer).interfaceId || super.supportsInterface(interfaceId);
+        return interfaceId == type(IBalancer).interfaceId || super.supportsInterface(interfaceId);
     }
 
     function decimals() public pure returns (uint8) {
@@ -99,10 +96,10 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
             return DepositProps({canDeposit: false, token: address(0), shares: 0});
         }
         ERC20 depositToken = ERC20(token);
-        uint256 rebalancerTokenBalance = depositToken.balanceOf(address(this));
+        uint256 balancerTokenBalance = depositToken.balanceOf(address(this));
         uint256 sharesSypply = s.sharesToken.totalSupply();
         uint256 sharesToMint = sharesSypply > 0
-            ? amount.mulDiv(sharesSypply, rebalancerTokenBalance)
+            ? amount.mulDiv(sharesSypply, balancerTokenBalance)
             : initSharesToMint();
 
         return DepositProps({canDeposit: true, token: token, shares: sharesToMint});
@@ -124,10 +121,10 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
             return RedeemProps({canRedeem: false, token: address(0), amount: 0});
         }
         ERC20 redeemToken = ERC20(token);
-        uint256 rebalancerTokenBalance = redeemToken.balanceOf(address(this));
+        uint256 balancerTokenBalance = redeemToken.balanceOf(address(this));
         uint256 sharesSypply = s.sharesToken.totalSupply();
         uint256 redeemAmount =
-            sharesSypply > 0 ? shares.mulDiv(rebalancerTokenBalance, sharesSypply) : 0;
+            sharesSypply > 0 ? shares.mulDiv(balancerTokenBalance, sharesSypply) : 0;
 
         return RedeemProps({canRedeem: true, token: token, amount: redeemAmount});
     }
@@ -156,9 +153,9 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         bool hedgeEnabled = ePrice < s.rebalanceExposurePrice;
 
         // sell exposureToken
-        ERC20 tokenRebalancerSell = hedgeEnabled ? s.exposureToken : s.hedgeToken;
+        ERC20 tokenBalancerSell = hedgeEnabled ? s.exposureToken : s.hedgeToken;
         // buy hedgeToken
-        ERC20 tokenRebalancerBuy = hedgeEnabled ? s.hedgeToken : s.exposureToken;
+        ERC20 tokenBalancerBuy = hedgeEnabled ? s.hedgeToken : s.exposureToken;
 
         // sell exposureToken -> ePrice / 1.1 -> 9.(09)
         uint256 sellPrice = (hedgeEnabled ? ePrice : hPrice).mulDiv(10 ** decimals(), s.multiplier);
@@ -166,8 +163,8 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         uint256 amountToCollect = amountUserBuy * sellPrice;
 
         return SwapProps({
-            tokenRebalancerSell: address(tokenRebalancerSell),
-            tokenRebalancerBuy: address(tokenRebalancerBuy),
+            tokenBalancerSell: address(tokenBalancerSell),
+            tokenBalancerBuy: address(tokenBalancerBuy),
             sellPrice: sellPrice,
             amountToCollect: amountToCollect
         });
@@ -176,13 +173,13 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
     // amountToBuy -> amount to buy exposureToken
     function swap(uint256 amountUserBuy) external nonReentrant {
         SwapProps memory sp = previewSwap(amountUserBuy);
-        ERC20 tokenRebalancerSell = ERC20(sp.tokenRebalancerSell);
-        if (tokenRebalancerSell.balanceOf(address(this)) < amountUserBuy) {
+        ERC20 tokenBalancerSell = ERC20(sp.tokenBalancerSell);
+        if (tokenBalancerSell.balanceOf(address(this)) < amountUserBuy) {
             revert SwapForbidden();
         } else {
-            ERC20 tokenRebalancerBuy = ERC20(sp.tokenRebalancerBuy);
-            tokenRebalancerBuy.transferFrom(msg.sender, address(this), sp.amountToCollect);
-            tokenRebalancerSell.transfer(address(this), amountUserBuy);
+            ERC20 tokenBalancerBuy = ERC20(sp.tokenBalancerBuy);
+            tokenBalancerBuy.transferFrom(msg.sender, address(this), sp.amountToCollect);
+            tokenBalancerSell.transfer(address(this), amountUserBuy);
         }
     }
 

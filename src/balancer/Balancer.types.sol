@@ -6,8 +6,8 @@ error RedeemForbidden();
 error SwapForbidden();
 
 struct SwapProps {
-    address tokenRebalancerSell;
-    address tokenRebalancerBuy;
+    address tokenBalancerSell;
+    address tokenBalancerBuy;
     uint256 sellPrice;
     uint256 amountToCollect;
 }
@@ -28,12 +28,11 @@ struct Config {
     address exposureToken;
     address hedgeToken;
     address oracle;
-    address registry;
     uint256 multiplier;
     uint256 rebalanceExposurePrice;
 }
 
-enum RTypes {
+enum BTypes {
     Tick,
     PeriodTick,
     UpOnlyTick
@@ -46,10 +45,10 @@ struct SerializedState {
     address oracle;
     uint256 multiplier;
     uint256 rebalanceExposurePrice;
-    RTypes rebType;
+    BTypes rebType;
 }
 
-interface IRebalancer {
+interface IBalancer {
     function decimals() external pure returns (uint8);
 
     function initSharesToMint() external pure returns (uint256);
