@@ -14,11 +14,13 @@ import {RTypeLib} from "./libs/RTypeLib.sol";
 import {
     Config,
     SwapProps,
-    OperationProps,
     SerializedState,
     RTypes,
     IRebalancer,
-    DepositAndWithdrawForbidden,
+    DepositProps,
+    RedeemProps,
+    DepositForbidden,
+    RedeemForbidden,
     SwapForbidden
 } from "./Rebalancer.types.sol";
 
@@ -80,43 +82,63 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         return 100 * 10 ** decimals();
     }
 
-    function previewOperation() public view returns (OperationProps memory) {
+    function _previewOperation() private view returns (bool canDepositOrWithdraw, address token) {
         uint256 ePrice = s.oracle.getExposurePrice(s.hedgeToken.decimals());
 
         bool hedgeEnabled = ePrice < s.rebalanceExposurePrice;
 
-        address opToken = hedgeEnabled ? address(s.hedgeToken) : address(s.exposureToken);
+        token = hedgeEnabled ? address(s.hedgeToken) : address(s.exposureToken);
         ERC20 rebalanceToken = hedgeEnabled ? s.exposureToken : s.hedgeToken;
 
-        bool canDepositOrWithdraw = rebalanceToken.balanceOf(address(this)) == 0;
-        return OperationProps({canDepositOrWithdraw: canDepositOrWithdraw, opToken: opToken});
+        canDepositOrWithdraw = rebalanceToken.balanceOf(address(this)) == 0;
+    }
+
+    function previewDeposit(uint256 amount) public view returns (DepositProps memory) {
+        (bool canDepositOrWithdraw, address token) = _previewOperation();
+        if (!canDepositOrWithdraw) {
+            return DepositProps({canDeposit: false, token: address(0), shares: 0});
+        }
+        ERC20 depositToken = ERC20(token);
+        uint256 rebalancerTokenBalance = depositToken.balanceOf(address(this));
+        uint256 sharesSypply = s.sharesToken.totalSupply();
+        uint256 sharesToMint = sharesSypply > 0
+            ? amount.mulDiv(sharesSypply, rebalancerTokenBalance)
+            : initSharesToMint();
+
+        return DepositProps({canDeposit: true, token: token, shares: sharesToMint});
     }
 
     function deposit(uint256 amount) external nonReentrant {
-        OperationProps memory op = previewOperation();
-        if (!op.canDepositOrWithdraw) {
-            revert DepositAndWithdrawForbidden();
+        DepositProps memory dp = previewDeposit(amount);
+        if (!dp.canDeposit) {
+            revert DepositForbidden();
         } else {
-            ERC20 token = ERC20(op.opToken);
-            uint256 rebalancerTokenBalance = token.balanceOf(address(this));
-            uint256 sharesToMint = rebalancerTokenBalance > 0
-                ? amount.mulDiv(10 ** decimals(), rebalancerTokenBalance)
-                : initSharesToMint();
-            token.transferFrom(msg.sender, address(this), amount);
-            s.sharesToken.mintTo(msg.sender, sharesToMint);
+            ERC20(dp.token).transferFrom(msg.sender, address(this), amount);
+            s.sharesToken.mintTo(msg.sender, dp.shares);
         }
     }
 
+    function previewRedeem(uint256 shares) public view returns (RedeemProps memory) {
+        (bool canDepositOrWithdraw, address token) = _previewOperation();
+        if (!canDepositOrWithdraw) {
+            return RedeemProps({canRedeem: false, token: address(0), amount: 0});
+        }
+        ERC20 redeemToken = ERC20(token);
+        uint256 rebalancerTokenBalance = redeemToken.balanceOf(address(this));
+        uint256 sharesSypply = s.sharesToken.totalSupply();
+        uint256 redeemAmount =
+            sharesSypply > 0 ? shares.mulDiv(rebalancerTokenBalance, sharesSypply) : 0;
+
+        return RedeemProps({canRedeem: true, token: token, amount: redeemAmount});
+    }
+
     function redeem(uint256 shares) external nonReentrant {
-        OperationProps memory op = previewOperation();
-        if (!op.canDepositOrWithdraw) {
-            revert DepositAndWithdrawForbidden();
+        RedeemProps memory rp = previewRedeem(shares);
+        if (!rp.canRedeem) {
+            revert RedeemForbidden();
         } else {
-            ERC20 token = ERC20(op.opToken);
-            uint256 share = shares.mulDiv(10 ** decimals(), s.sharesToken.totalSupply());
-            uint256 tokenToSend = share.mulDiv(token.balanceOf(address(this)), 10 ** decimals());
             s.sharesToken.burnFrom(msg.sender, shares);
-            token.transfer(msg.sender, tokenToSend);
+            ERC20(rp.token).transfer(msg.sender, rp.amount);
         }
     }
 

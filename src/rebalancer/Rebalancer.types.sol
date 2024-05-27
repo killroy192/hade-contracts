@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-error DepositAndWithdrawForbidden();
+error DepositForbidden();
+error RedeemForbidden();
 error SwapForbidden();
 
 struct SwapProps {
@@ -12,9 +13,16 @@ struct SwapProps {
     uint256 buyPrice;
 }
 
-struct OperationProps {
-    bool canDepositOrWithdraw;
-    address opToken;
+struct DepositProps {
+    bool canDeposit;
+    address token;
+    uint256 shares;
+}
+
+struct RedeemProps {
+    bool canRedeem;
+    address token;
+    uint256 amount;
 }
 
 struct Config {
@@ -51,9 +59,11 @@ interface IRebalancer {
 
     function swap(uint256 amountToBuy) external;
 
-    function previewOperation() external view returns (OperationProps memory);
+    function previewDeposit(uint256 amount) external view returns (DepositProps memory);
 
     function deposit(uint256 amount) external;
+
+    function previewRedeem(uint256 shares) external view returns (RedeemProps memory);
 
     function redeem(uint256 shares) external;
 

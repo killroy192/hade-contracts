@@ -5,6 +5,8 @@ pragma solidity ^0.8.16;
 // solhint-disable no-console
 import "@std/Test.sol";
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {
     Rebalancer,
     Config,
@@ -12,12 +14,17 @@ import {
     ERC20,
     SerializedState,
     RTypes,
-    OperationProps
+    DepositProps,
+    DepositForbidden,
+    RedeemProps,
+    RedeemForbidden
 } from "src/rebalancer/Rebalancer.sol";
 import {MockOracle} from "./mocks/MockOracle.sol";
 import {MockRegistry} from "./mocks/MockRegistry.sol";
 
 contract RebalancerTest is Test {
+    using Math for uint8;
+
     SharesToken private exposureToken = new SharesToken("mockWETH", "mWETH");
     SharesToken private hedgeToken = new SharesToken("mockUSD", "mUSD");
     MockOracle private oracle = new MockOracle();
@@ -75,28 +82,103 @@ contract RebalancerTest is Test {
         assertEq(SharesToken(state.sharesToken).name(), "hdmWETH_mUSD_tick");
     }
 
-    function test_previewOperationInitial() external {
-        OperationProps memory op = rebalancer.previewOperation();
-        assertEq(op.canDepositOrWithdraw, true);
-        assertEq(op.opToken, config.exposureToken);
-        _hedgeModeOn();
-        op = rebalancer.previewOperation();
-        assertEq(op.canDepositOrWithdraw, true);
-        assertEq(op.opToken, config.hedgeToken);
+    function _deposit(address user, uint256 amount)
+        private
+        returns (ERC20 token, uint256 depositAmount)
+    {
+        DepositProps memory dp = rebalancer.previewDeposit(amount);
+        token = ERC20(dp.token);
+        vm.startPrank(user);
+        depositAmount = amount * 10 ** token.decimals();
+        token.approve(address(rebalancer), depositAmount);
+        rebalancer.deposit(depositAmount);
+        vm.stopPrank();
     }
 
     function test_deposit() external {
-        OperationProps memory op = rebalancer.previewOperation();
-        vm.startPrank(ALICE);
-        ERC20 eToken = ERC20(op.opToken);
-        uint256 depositAmount = 1 * 10 ** eToken.decimals();
-        eToken.approve(address(rebalancer), depositAmount);
-        rebalancer.deposit(depositAmount);
-        vm.stopPrank();
-        assertEq(eToken.balanceOf(address(rebalancer)), depositAmount);
-        assertEq(eToken.balanceOf(ALICE), initExposureBalance - depositAmount);
+        (ERC20 token, uint256 depositAmount) = _deposit(ALICE, 1);
+        assertEq(token.balanceOf(address(rebalancer)), depositAmount);
+        assertEq(token.balanceOf(ALICE), initExposureBalance - depositAmount);
         assertEq(
             SharesToken(rebalancer.sharesToken()).balanceOf(ALICE), rebalancer.initSharesToMint()
         );
+    }
+
+    function testFuzz_twoDeposits(uint8 aliceAmount, uint8 bobAmount) external {
+        vm.assume(aliceAmount > 0 && aliceAmount <= 10 && bobAmount > 0 && bobAmount <= 10);
+        (ERC20 token, uint256 aliceDeposit) = _deposit(ALICE, aliceAmount);
+        (, uint256 bobDeposit) = _deposit(BOB, bobAmount);
+        assertEq(token.balanceOf(address(rebalancer)), aliceDeposit + bobDeposit);
+        assertEq(token.balanceOf(ALICE), initExposureBalance - aliceDeposit);
+        assertEq(token.balanceOf(BOB), initExposureBalance - bobDeposit);
+        assertEq(
+            SharesToken(rebalancer.sharesToken()).balanceOf(ALICE), rebalancer.initSharesToMint()
+        );
+        assertEq(
+            SharesToken(rebalancer.sharesToken()).balanceOf(BOB),
+            bobAmount.mulDiv(rebalancer.initSharesToMint(), aliceAmount)
+        );
+    }
+
+    function test_previewDeposit_unbalanced() external {
+        (, uint256 depositAmount) = _deposit(ALICE, 1);
+        _hedgeModeOn();
+        DepositProps memory dp = rebalancer.previewDeposit(depositAmount);
+        assertEq(dp.canDeposit, false);
+        assertEq(dp.token, address(0));
+    }
+
+    function test_deposit_unbalanced() external {
+        (ERC20 token, uint256 depositAmount) = _deposit(ALICE, 1);
+        _hedgeModeOn();
+        vm.startPrank(ALICE);
+        token.approve(address(rebalancer), depositAmount);
+        vm.expectRevert(abi.encodeWithSelector(DepositForbidden.selector));
+        rebalancer.deposit(depositAmount);
+        vm.stopPrank();
+    }
+
+    function _redeem(address user, uint256 shares)
+        private
+        returns (ERC20 token, uint256 redeemAmount)
+    {
+        RedeemProps memory rp = rebalancer.previewRedeem(shares);
+        token = ERC20(rp.token);
+        vm.startPrank(user);
+        redeemAmount = rp.amount;
+        SharesToken(rebalancer.sharesToken()).approve(address(rebalancer), shares);
+        rebalancer.redeem(shares);
+        vm.stopPrank();
+    }
+
+    function test_redeem() external {
+        SharesToken sharesToken = SharesToken(rebalancer.sharesToken());
+        _deposit(ALICE, 1);
+        (ERC20 token,) = _redeem(ALICE, sharesToken.balanceOf(ALICE));
+        assertEq(token.balanceOf(address(rebalancer)), 0);
+        assertEq(token.balanceOf(ALICE), initExposureBalance);
+        assertEq(sharesToken.balanceOf(ALICE), 0);
+        assertEq(sharesToken.totalSupply(), 0);
+    }
+
+    function test_previewRedeem_unbalanced() external {
+        _deposit(ALICE, 1);
+        _hedgeModeOn();
+        SharesToken sharesToken = SharesToken(rebalancer.sharesToken());
+        RedeemProps memory rp = rebalancer.previewRedeem(sharesToken.balanceOf(ALICE));
+        assertEq(rp.canRedeem, false);
+        assertEq(rp.token, address(0));
+    }
+
+    function test_redeem_unbalanced() external {
+        _deposit(ALICE, 1);
+        _hedgeModeOn();
+        SharesToken sharesToken = SharesToken(rebalancer.sharesToken());
+        uint256 aliceShares = sharesToken.balanceOf(ALICE);
+        vm.startPrank(ALICE);
+        sharesToken.approve(address(rebalancer), aliceShares);
+        vm.expectRevert(abi.encodeWithSelector(RedeemForbidden.selector));
+        rebalancer.redeem(aliceShares);
+        vm.stopPrank();
     }
 }
