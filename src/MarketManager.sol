@@ -193,29 +193,4 @@ contract MarketManager is IMarketManager, ReentrancyGuard {
             change -= toWithdraw;
         }
     }
-
-    /**
-     * @dev MVP oos
-     */
-
-    function roll(bytes32 id) external marketExist(markets[id]) {
-        Market storage market = markets[id];
-        MarketConfig memory config = market.config;
-        MarketState memory state = market.state;
-        if (state.lastRoll + config.period > block.number) {
-            revert RollingTooEarly();
-        }
-        market.state = MarketState({
-            strike: IStrikeOracle(config.oracle).getStrike(state.strike),
-            lastRoll: state.lastRoll + config.period
-        });
-    }
-
-    function cancelRolling(bytes32 id) external canRedeem(markets[id]) {
-        // create new additional q for forced redemptions
-    }
-
-    function forceRedeem(bytes32 id) external {
-        // forcely redeem if was registerd in force redemtion q
-    }
 }

@@ -134,4 +134,22 @@ library LinkedListLibrary {
 
         return order;
     }
+
+    function toList(LinkedList storage list, address value, uint256 amount)
+        external
+        view
+        returns (address[] memory)
+    {
+        address[] memory result = new address[](amount);
+
+        uint256 i = 0;
+        address item = value == address(0) ? list.head : list.next[value];
+
+        while (i <= amount - 1 && item != address(0)) {
+            result[i] = item;
+            item = list.next[item];
+            i += 1;
+        }
+        return result;
+    }
 }
