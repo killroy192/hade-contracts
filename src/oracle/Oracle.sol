@@ -22,15 +22,11 @@ contract Oracle is IOracle {
         dataFeed = AggregatorV3Interface(chainlinkDataFeedFeed);
     }
 
-    function decimals() public pure returns (uint8) {
-        return 16;
+    function getHedgePrice(uint8 dec) external view returns (uint256) {
+        return uint256(1 * 10 ** dec).mulDiv(10 ** dec, getExposurePrice(dec));
     }
 
-    function getHedgePrice() external view returns (uint256) {
-        return uint256(1 * 10 ** decimals()).mulDiv(10 ** decimals(), getExposurePrice());
-    }
-
-    function getExposurePrice() public view returns (uint256) {
+    function getExposurePrice(uint8 dec) public view returns (uint256) {
         (
             /* uint80 roundID */
             ,
@@ -42,12 +38,12 @@ contract Oracle is IOracle {
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
 
-        uint256 price = answer.toUint256();
-
-        if (price <= 0) {
-            revert ForbiddenValue(price);
+        if (answer <= 0) {
+            revert ForbiddenValue(answer);
         }
 
-        return price.scale(dataFeed.decimals(), decimals());
+        uint256 price = answer.toUint256();
+
+        return price.scale(dataFeed.decimals(), dec);
     }
 }

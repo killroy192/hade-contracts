@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {SharesToken} from "src/SharesToken.sol";
 import {IOracle} from "src/oracle/Oracle.types.sol";
@@ -17,7 +18,6 @@ import {
     SerializedState,
     RTypes,
     IRebalancer,
-    IRebalancerDevUtils,
     DepositAndWithdrawForbidden,
     SwapForbidden
 } from "./Rebalancer.types.sol";
@@ -31,7 +31,7 @@ struct State {
     uint256 rebalanceHedgePrice;
 }
 
-contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
+contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
     using Math for uint256;
     using RTypeLib for RTypes;
 
@@ -65,6 +65,10 @@ contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
         IRebalancerRegistry(_config.registry).register(address(this));
     }
 
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IRebalancer).interfaceId || super.supportsInterface(interfaceId);
+    }
+
     function decimals() public pure returns (uint8) {
         return 8;
     }
@@ -75,8 +79,8 @@ contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
         // hPrice = 0.1 e
         // ePrice = 10 h
 
-        uint256 hPrice = s.oracle.getHedgePrice();
-        uint256 ePrice = s.oracle.getExposurePrice();
+        uint256 hPrice = s.oracle.getHedgePrice(s.exposureToken.decimals());
+        uint256 ePrice = s.oracle.getExposurePrice(s.hedgeToken.decimals());
 
         // rebalanceHedgePrice = 0.05 e
         // hedgeEnabled = true
@@ -120,7 +124,7 @@ contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
     }
 
     function previewOperation() public view returns (OperationProps memory) {
-        uint256 hPrice = s.oracle.getHedgePrice();
+        uint256 hPrice = s.oracle.getHedgePrice(s.exposureToken.decimals());
 
         bool hedgeEnabled = hPrice < s.rebalanceHedgePrice;
 
@@ -173,6 +177,6 @@ contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
     }
 
     function isHedgeMode() external view returns (bool) {
-        return s.oracle.getHedgePrice() < s.rebalanceHedgePrice;
+        return s.oracle.getHedgePrice(s.exposureToken.decimals()) < s.rebalanceHedgePrice;
     }
 }

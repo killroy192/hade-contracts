@@ -49,9 +49,7 @@ library LinkedListLibrary {
 
     function _push(LinkedList storage list, address value) private {
         if (!isEmpty(list)) {
-            // tail -> value
             list.next[list.tail] = value;
-            // tail <- value
             list.prev[value] = list.tail;
         } else {
             list.head = value;
@@ -60,33 +58,7 @@ library LinkedListLibrary {
         list.length += 1;
     }
 
-    function shift(LinkedList storage list) external notEmpty(list) returns (address) {
-        address value = list.head;
-        address next_value = list.next[value];
-        list.head = next_value;
-        if (value == list.tail) {
-            delete list.tail;
-        }
-        delete list.prev[next_value];
-        delete list.next[value];
-        list.length -= 1;
-        return value;
-    }
-
-    function reorg(LinkedList storage list, address value) external {
-        if (isExist(list, value) && value != list.head) {
-            _omit(list, value);
-            address head_value = list.head;
-            list.head = value;
-            list.prev[head_value] = value;
-            list.next[value] = head_value;
-            list.prev[value] = address(0);
-        } else {
-            _push(list, value);
-        }
-    }
-
-    function _omit(LinkedList storage list, address value) private {
+    function remove(LinkedList storage list, address value) external exist(list, value) {
         address next_value = list.next[value];
         address prev_value = list.prev[value];
         list.prev[next_value] = prev_value;
@@ -97,42 +69,9 @@ library LinkedListLibrary {
         if (value == list.tail) {
             list.tail = prev_value;
         }
-    }
-
-    function remove(LinkedList storage list, address value) external exist(list, value) {
-        _omit(list, value);
         delete list.next[value];
         delete list.prev[value];
         list.length -= 1;
-    }
-
-    /**
-     * @dev use only for test porposes
-     * todo migrate to dev utils
-     */
-    function position(LinkedList storage list, address value)
-        external
-        view
-        exist(list, value)
-        returns (uint256)
-    {
-        if (list.head == value) {
-            return 0;
-        }
-
-        if (list.tail == value) {
-            return list.length - 1;
-        }
-
-        address candidate = list.next[list.head];
-        uint256 order = 1;
-
-        while (order < list.length && candidate != value) {
-            candidate = list.next[candidate];
-            order += 1;
-        }
-
-        return order;
     }
 
     function toList(LinkedList storage list, address value, uint256 amount)

@@ -54,12 +54,10 @@ interface IRebalancer {
     function deposit(uint256 amount) external;
 
     function redeem(uint256 shares) external;
-}
 
-/**
- * dev utils
- */
-interface IRebalancerDevUtils {
+    /**
+     * dev utils
+     */
     function state() external view returns (SerializedState memory);
 
     function isHedgeMode() external view returns (bool);

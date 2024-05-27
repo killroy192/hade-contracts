@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-error ForbiddenValue(uint256 answer);
+error ForbiddenValue(int256 answer);
 
 interface IOracle {
-    function getHedgePrice() external view returns (uint256);
-    function getExposurePrice() external view returns (uint256);
+    function getHedgePrice(uint8 dec) external view returns (uint256);
+    function getExposurePrice(uint8 dec) external view returns (uint256);
 }
