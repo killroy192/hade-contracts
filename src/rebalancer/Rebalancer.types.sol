@@ -23,7 +23,7 @@ struct Config {
     address oracle;
     address registry;
     uint256 multiplier;
-    uint256 rebalanceHedgePrice;
+    uint256 rebalanceExposurePrice;
 }
 
 enum RTypes {
@@ -38,12 +38,14 @@ struct SerializedState {
     address sharesToken;
     address oracle;
     uint256 multiplier;
-    uint256 rebalanceHedgePrice;
+    uint256 rebalanceExposurePrice;
     RTypes rebType;
 }
 
 interface IRebalancer {
     function decimals() external pure returns (uint8);
+
+    function initSharesToMint() external pure returns (uint256);
 
     function previewSwap() external view returns (SwapProps memory);
 
@@ -55,10 +57,9 @@ interface IRebalancer {
 
     function redeem(uint256 shares) external;
 
-    /**
-     * dev utils
-     */
     function state() external view returns (SerializedState memory);
 
     function isHedgeMode() external view returns (bool);
+
+    function sharesToken() external view returns (address);
 }

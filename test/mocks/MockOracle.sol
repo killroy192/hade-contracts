@@ -21,4 +21,8 @@ contract MockOracle is IOracle {
     function setPrice(uint256 exposurePrice) external {
         _price = exposurePrice;
     }
+
+    function rawPrice() external view returns (uint256) {
+        return _price;
+    }
 }

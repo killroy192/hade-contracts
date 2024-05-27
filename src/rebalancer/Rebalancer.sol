@@ -28,9 +28,12 @@ struct State {
     SharesToken sharesToken;
     IOracle oracle;
     uint256 multiplier;
-    uint256 rebalanceHedgePrice;
+    uint256 rebalanceExposurePrice;
 }
 
+/**
+ * todo add events
+ */
 contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
     using Math for uint256;
     using RTypeLib for RTypes;
@@ -48,7 +51,7 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
                 "hd", exposureToken.symbol(), "_", hedgeToken.symbol(), "_", rebType.toString()
             )
         );
-        SharesToken sharesToken = new SharesToken(
+        SharesToken _sharesToken = new SharesToken(
                 tokenName,
                 tokenName
             );
@@ -56,10 +59,10 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         s = State({
             exposureToken: ERC20(_config.exposureToken),
             hedgeToken: ERC20(_config.hedgeToken),
-            sharesToken: sharesToken,
+            sharesToken: _sharesToken,
             oracle: IOracle(_config.oracle),
             multiplier: _config.multiplier,
-            rebalanceHedgePrice: _config.rebalanceHedgePrice
+            rebalanceExposurePrice: _config.rebalanceExposurePrice
         });
 
         IRebalancerRegistry(_config.registry).register(address(this));
@@ -73,6 +76,50 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         return 8;
     }
 
+    function initSharesToMint() public pure returns (uint256) {
+        return 100 * 10 ** decimals();
+    }
+
+    function previewOperation() public view returns (OperationProps memory) {
+        uint256 ePrice = s.oracle.getExposurePrice(s.hedgeToken.decimals());
+
+        bool hedgeEnabled = ePrice < s.rebalanceExposurePrice;
+
+        address opToken = hedgeEnabled ? address(s.hedgeToken) : address(s.exposureToken);
+        ERC20 rebalanceToken = hedgeEnabled ? s.exposureToken : s.hedgeToken;
+
+        bool canDepositOrWithdraw = rebalanceToken.balanceOf(address(this)) == 0;
+        return OperationProps({canDepositOrWithdraw: canDepositOrWithdraw, opToken: opToken});
+    }
+
+    function deposit(uint256 amount) external nonReentrant {
+        OperationProps memory op = previewOperation();
+        if (!op.canDepositOrWithdraw) {
+            revert DepositAndWithdrawForbidden();
+        } else {
+            ERC20 token = ERC20(op.opToken);
+            uint256 rebalancerTokenBalance = token.balanceOf(address(this));
+            uint256 sharesToMint = rebalancerTokenBalance > 0
+                ? amount.mulDiv(10 ** decimals(), rebalancerTokenBalance)
+                : initSharesToMint();
+            token.transferFrom(msg.sender, address(this), amount);
+            s.sharesToken.mintTo(msg.sender, sharesToMint);
+        }
+    }
+
+    function redeem(uint256 shares) external nonReentrant {
+        OperationProps memory op = previewOperation();
+        if (!op.canDepositOrWithdraw) {
+            revert DepositAndWithdrawForbidden();
+        } else {
+            ERC20 token = ERC20(op.opToken);
+            uint256 share = shares.mulDiv(10 ** decimals(), s.sharesToken.totalSupply());
+            uint256 tokenToSend = share.mulDiv(token.balanceOf(address(this)), 10 ** decimals());
+            s.sharesToken.burnFrom(msg.sender, shares);
+            token.transfer(msg.sender, tokenToSend);
+        }
+    }
+
     function previewSwap() public view returns (SwapProps memory) {
         // h = usd
         // e = eth
@@ -82,9 +129,9 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         uint256 hPrice = s.oracle.getHedgePrice(s.exposureToken.decimals());
         uint256 ePrice = s.oracle.getExposurePrice(s.hedgeToken.decimals());
 
-        // rebalanceHedgePrice = 0.05 e
+        // rebalanceExposurePrice = 0.05 e
         // hedgeEnabled = true
-        bool hedgeEnabled = hPrice < s.rebalanceHedgePrice;
+        bool hedgeEnabled = ePrice < s.rebalanceExposurePrice;
 
         // sell exposureToken
         ERC20 tokenToSell = hedgeEnabled ? s.exposureToken : s.hedgeToken;
@@ -123,43 +170,6 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
         }
     }
 
-    function previewOperation() public view returns (OperationProps memory) {
-        uint256 hPrice = s.oracle.getHedgePrice(s.exposureToken.decimals());
-
-        bool hedgeEnabled = hPrice < s.rebalanceHedgePrice;
-
-        address opToken = hedgeEnabled ? address(s.hedgeToken) : address(s.exposureToken);
-        ERC20 rebalanceToken = hedgeEnabled ? s.exposureToken : s.hedgeToken;
-
-        bool canDepositOrWithdraw = rebalanceToken.balanceOf(address(this)) == 0;
-        return OperationProps({canDepositOrWithdraw: canDepositOrWithdraw, opToken: opToken});
-    }
-
-    function deposit(uint256 amount) external nonReentrant {
-        OperationProps memory op = previewOperation();
-        if (!op.canDepositOrWithdraw) {
-            revert DepositAndWithdrawForbidden();
-        } else {
-            ERC20 token = ERC20(op.opToken);
-            uint256 sharesToMint = amount.mulDiv(10 ** decimals(), token.balanceOf(address(this)));
-            token.transferFrom(msg.sender, address(this), amount);
-            s.sharesToken.mintTo(msg.sender, sharesToMint);
-        }
-    }
-
-    function redeem(uint256 shares) external nonReentrant {
-        OperationProps memory op = previewOperation();
-        if (!op.canDepositOrWithdraw) {
-            revert DepositAndWithdrawForbidden();
-        } else {
-            ERC20 token = ERC20(op.opToken);
-            uint256 share = shares.mulDiv(10 ** decimals(), s.sharesToken.totalSupply());
-            uint256 tokenToSend = share.mulDiv(token.balanceOf(address(this)), 10 ** decimals());
-            s.sharesToken.burnFrom(msg.sender, shares);
-            token.transfer(msg.sender, tokenToSend);
-        }
-    }
-
     /**
      * dev utils
      */
@@ -171,12 +181,16 @@ contract Rebalancer is IRebalancer, ReentrancyGuard, ERC165 {
             sharesToken: address(s.sharesToken),
             oracle: address(s.oracle),
             multiplier: s.multiplier,
-            rebalanceHedgePrice: s.rebalanceHedgePrice,
+            rebalanceExposurePrice: s.rebalanceExposurePrice,
             rebType: rebType
         });
     }
 
     function isHedgeMode() external view returns (bool) {
-        return s.oracle.getHedgePrice(s.exposureToken.decimals()) < s.rebalanceHedgePrice;
+        return s.oracle.getExposurePrice(s.hedgeToken.decimals()) < s.rebalanceExposurePrice;
+    }
+
+    function sharesToken() external view returns (address) {
+        return address(s.sharesToken);
     }
 }
