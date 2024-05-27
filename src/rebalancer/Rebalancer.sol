@@ -5,82 +5,39 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {HadeToken} from "src/HadeToken.sol";
-import {IRebalancerRegistry} from "src/RebalancerRegistry.types.sol";
+import {SharesToken} from "src/SharesToken.sol";
+import {IOracle} from "src/oracle/Oracle.types.sol";
+import {IRebalancerRegistry} from "src/registry/RebalancerRegistry.types.sol";
 
-error DepositAndWithdrawForbidden();
-error SwapForbidden();
-
-interface IOracle {
-    function getHedgePrice() external view returns (uint256);
-    function getExposurePrice() external view returns (uint256);
-}
-
-struct SwapProps {
-    address tokenToSell;
-    uint256 maxAmountToSell;
-    uint256 sellPrice;
-    address tokenToBuy;
-    uint256 buyPrice;
-}
-
-struct OperationProps {
-    bool canDepositOrWithdraw;
-    address opToken;
-}
-
-struct Config {
-    address exposureToken;
-    address hedgeToken;
-    address oracle;
-    address registry;
-    uint256 multiplier;
-    uint256 rebalanceHedgePrice;
-}
+import {RTypeLib} from "./libs/RTypeLib.sol";
+import {
+    Config,
+    SwapProps,
+    OperationProps,
+    SerializedState,
+    RTypes,
+    IRebalancer,
+    IRebalancerDevUtils,
+    DepositAndWithdrawForbidden,
+    SwapForbidden
+} from "./Rebalancer.types.sol";
 
 struct State {
     ERC20 exposureToken;
     ERC20 hedgeToken;
-    HadeToken sharesToken;
+    SharesToken sharesToken;
     IOracle oracle;
     uint256 multiplier;
     uint256 rebalanceHedgePrice;
 }
 
-struct SerializedState {
-    address exposureToken;
-    address hedgeToken;
-    address sharesToken;
-    address oracle;
-    uint256 multiplier;
-    uint256 rebalanceHedgePrice;
-}
-
-library RebalancerTypeLib {
-    enum RTypes {
-        Tick,
-        PeriodTick,
-        UpOnlyTick
-    }
-
-    function typeName(RTypes rebType) external pure returns (string memory) {
-        if (rebType == RTypes.Tick) {
-            return "tick";
-        }
-        if (rebType == RTypes.PeriodTick) {
-            return "periodTick";
-        }
-        return "upOnlyTick";
-    }
-}
-
-contract Rebalancer is ReentrancyGuard {
+contract Rebalancer is IRebalancer, IRebalancerDevUtils, ReentrancyGuard {
     using Math for uint256;
-    using RebalancerTypeLib for RebalancerTypeLib.RTypes;
+    using RTypeLib for RTypes;
 
     State private s;
 
-    RebalancerTypeLib.RTypes private constant rebType = RebalancerTypeLib.RTypes.Tick;
+    RTypes private constant rebType = RTypes.Tick;
 
     // discount same decimals
     constructor(Config memory _config) {
@@ -88,10 +45,10 @@ contract Rebalancer is ReentrancyGuard {
         ERC20 hedgeToken = ERC20(_config.hedgeToken);
         string memory tokenName = string(
             abi.encodePacked(
-                "hd", exposureToken.symbol(), "_", hedgeToken.symbol(), "_", rebType.typeName()
+                "hd", exposureToken.symbol(), "_", hedgeToken.symbol(), "_", rebType.toString()
             )
         );
-        HadeToken sharesToken = new HadeToken(
+        SharesToken sharesToken = new SharesToken(
                 tokenName,
                 tokenName
             );
@@ -108,7 +65,7 @@ contract Rebalancer is ReentrancyGuard {
         IRebalancerRegistry(_config.registry).register(address(this));
     }
 
-    function decimals() private pure returns (uint8) {
+    function decimals() public pure returns (uint8) {
         return 8;
     }
 
@@ -210,7 +167,8 @@ contract Rebalancer is ReentrancyGuard {
             sharesToken: address(s.sharesToken),
             oracle: address(s.oracle),
             multiplier: s.multiplier,
-            rebalanceHedgePrice: s.rebalanceHedgePrice
+            rebalanceHedgePrice: s.rebalanceHedgePrice,
+            rebType: rebType
         });
     }
 

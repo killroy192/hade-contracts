@@ -2,40 +2,35 @@
 pragma solidity ^0.8.16;
 
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {AggregatorV3Interface} from
     "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-import {IStrikeOracle, StrikeTypes, ForbiddenValue} from "./StrikeOracle.types.sol";
+import {IOracle, ForbiddenValue} from "./Oracle.types.sol";
 
 import {TokenMath} from "src/libs/TokenMath.sol";
 
-contract StrikeOracle is IStrikeOracle {
+contract Oracle is IOracle {
     using SafeCast for int256;
     using TokenMath for uint256;
+    using Math for uint256;
 
     AggregatorV3Interface private dataFeed;
-    StrikeTypes private strikeType;
 
-    constructor(address chainlinkDataFeedFeed, StrikeTypes _strikeType) {
+    constructor(address chainlinkDataFeedFeed) {
         dataFeed = AggregatorV3Interface(chainlinkDataFeedFeed);
-        strikeType = _strikeType;
     }
 
     function decimals() public pure returns (uint8) {
         return 16;
     }
 
-    function getStrike(uint256 prevStrike) external view returns (uint256) {
-        uint256 formattedPrice = getStrike();
-
-        if (strikeType == StrikeTypes.UpOnly) {
-            return prevStrike < formattedPrice ? formattedPrice : prevStrike;
-        }
-        return formattedPrice;
+    function getHedgePrice() external view returns (uint256) {
+        return uint256(1 * 10 ** decimals()).mulDiv(10 ** decimals(), getExposurePrice());
     }
 
-    function getStrike() public view returns (uint256) {
+    function getExposurePrice() public view returns (uint256) {
         (
             /* uint80 roundID */
             ,
@@ -54,9 +49,5 @@ contract StrikeOracle is IStrikeOracle {
         }
 
         return price.scale(dataFeed.decimals(), decimals());
-    }
-
-    function getStrikeType() external view returns (StrikeTypes) {
-        return strikeType;
     }
 }

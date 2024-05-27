@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {LinkedList, LinkedListLibrary} from "src/libs/LinkedList.sol";
-
-import {IRebalancerRegistry} from "src/RebalancerRegistry.types.sol";
+import {LinkedList, LinkedListLibrary} from "./libs/LinkedList.sol";
+import {IRebalancerRegistry} from "./RebalancerRegistry.types.sol";
 
 contract RebalancerRegistry is IRebalancerRegistry {
     using LinkedListLibrary for LinkedList;
