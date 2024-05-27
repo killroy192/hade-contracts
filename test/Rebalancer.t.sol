@@ -34,7 +34,7 @@ contract RebalancerTest is Test {
     });
 
     address private immutable ALICE = makeAddr("alice");
-    address private immutable BOB = makeAddr("alice");
+    address private immutable BOB = makeAddr("BOB");
     uint256 private initExposureBalance = 10 * 10 ** exposureToken.decimals();
     uint256 private initHedgeBalance = 10 * config.rebalanceExposurePrice;
 
