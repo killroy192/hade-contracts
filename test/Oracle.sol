@@ -8,7 +8,7 @@ import "@std/Test.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {Oracle, ForbiddenValue} from "src/oracle/Oracle.sol";
+import {Oracle} from "src/oracle/Oracle.sol";
 import {MockChainlinkFeed} from "./mocks/MockChainlinkFeed.sol";
 
 contract OracleTest is Test {
@@ -29,7 +29,6 @@ contract OracleTest is Test {
     function testFuzz_getExposurePriceError(int32 answer) external {
         vm.assume(answer <= 0);
         feed.setAnswer(answer);
-        // vm.expectRevert(abi.encodeWithSelector(ForbiddenValue.selector, answer));
         vm.expectRevert();
         oracle.getExposurePrice(expDec);
     }
@@ -50,7 +49,6 @@ contract OracleTest is Test {
     function testFuzz_getHedgePriceError(int32 answer) external {
         vm.assume(answer <= 0);
         feed.setAnswer(answer);
-        // vm.expectRevert(abi.encodeWithSelector(ForbiddenValue.selector, answer));
         vm.expectRevert();
         oracle.getHedgePrice(hedgeDec);
     }
